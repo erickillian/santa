@@ -73,22 +73,32 @@ def save_image_numpy(image_numpy, image_path, aspect_ratio=1.0):
 @torch.no_grad()
 def eval_loader(model, test_loader_a, test_loader_b, output_directory, opt):
     fake_dir = os.path.join(output_directory, 'fake')
+    real_dir = os.path.join(output_directory, 'real')
+
     if not os.path.exists(fake_dir):
         os.mkdir(fake_dir)
+    if not os.path.exists(real_dir):
+        os.mkdir(real_dir)
     if opt.direction == 'AtoB':
         test_loader = test_loader_a
-        real_dir = os.path.join(opt.dataroot, 'testB')
-        acc_loader = test_loader_b
+        real_loader = test_loader_b
     else:
         test_loader = test_loader_b
-        real_dir = os.path.join(opt.dataroot, 'testA')
-        acc_loader = test_loader_a
+        real_loader = test_loader_a
 
-    for it, (data, acc_data) in enumerate(zip(test_loader,acc_loader)):
-        fake = model.translate(data['A'].cuda(), acc_data['A'].cuda())
-        path_fake = os.path.join(fake_dir, os.path.basename(data['A_paths'][0]).replace('jpg', 'png'))
-        im = tensor2im(fake)
-        save_image_numpy(im, path_fake)
+    for it, (test_data, real_data) in enumerate(zip(test_loader,real_loader)):
+        fake = model.translate(test_data['A'].cuda())
+        real = model.translate(real_data['A'].cuda())
+        
+        path_fake = os.path.join(fake_dir, os.path.basename(test_data['A_paths'][0]).replace('jpg', 'png'))
+        path_real = os.path.join(real_dir, os.path.basename(real_data['A_paths'][0]).replace('jpg', 'png'))
+
+        # print('Saving %s and %s' % (path_fake, path_real))
+        im_fake = tensor2im(fake)
+        im_real = tensor2im(real)
+
+        save_image_numpy(im_fake, path_fake)
+        save_image_numpy(im_real, path_real)
     eval_dict = eval_method(real_dir, fake_dir)
     return eval_dict
 
@@ -102,7 +112,7 @@ def eval_method(real_path, fake_path):
     print(real_path)
     print(fake_path)
     eval_dict = {}
-    eval_args = {'fid': True, 'kid': True, 'kid_subset_size': 50, 'kid_subsets': 10, 'verbose': False, 'cuda': True}
+    eval_args = {'fid': True, 'kid': True, 'kid_subset_size': 20, 'kid_subsets': 10, 'verbose': False, 'cuda': True}
     metric_dict_AB = torch_fidelity.calculate_metrics(input1=real_path, input2=fake_path, **eval_args)
     eval_dict['FID'] = metric_dict_AB['frechet_inception_distance']
     eval_dict['KID'] = metric_dict_AB['kernel_inception_distance_mean']*100.
